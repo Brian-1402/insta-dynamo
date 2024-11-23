@@ -1,7 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 from hashlib import sha256
-from app.main import app, hash_table, STORE_DIR
+from app.main import app
+from app.core.key_value import kv_storage
+from app.core.config import STORE_DIR
 import os
 
 
@@ -10,7 +12,7 @@ client = TestClient(app)
 def setup_function():
     """Setup function to reset the hash table and ensure a clean store directory."""
     global hash_table
-    hash_table.clear()
+    kv_storage.clear()
     if os.path.exists(STORE_DIR):
         for file in os.listdir(STORE_DIR):
             os.remove(os.path.join(STORE_DIR, file))

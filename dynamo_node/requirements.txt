@@ -3,6 +3,8 @@ uvicorn
 python-multipart
 pytest
 coverage
+pytest-cov
 httpx
 aiofiles
 uhashring
+python-dotenv

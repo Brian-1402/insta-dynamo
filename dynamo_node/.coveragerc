@@ -1,0 +1,11 @@
+[run]
+branch = True
+source = my_project
+
+[report]
+omit =
+    tests/*
+    setup.py
+
+[html]
+directory = coverage_html_report

@@ -1,16 +1,28 @@
-import random
-from uhashring import HashRing
-from typing import Dict, Set, List
-import string
 from collections import defaultdict
+from typing import Dict, Set, List
+from uhashring import HashRing
+from app.core.config import NODE_ID, VNODES
+import hashlib
+import pickle
 
+def hash_key(key: str) -> int:
+    return int(hashlib.sha256(key.encode()).hexdigest(), 16)
+
+def custom_hash(key):
+    # Check if the input is already a valid SHA256 hash (64-character hex string)
+    if isinstance(key, str) and len(key) == 64 and all(c in '0123456789abcdef' for c in key.lower()):
+        return int(key, 16)  # Convert the hex string to an integer
+    else:
+        # For nodes like 'node1', hash them using their own hash function
+        return hash_key(key)
 class ConsistentHashManager:
     """Manages consistent hashing and node operations."""
     def __init__(self, nodes: List[str], node_id: str):
         self.node_id = node_id
-        self.hash_ring = HashRing(nodes=nodes)
+        self.hash_ring = HashRing(nodes=nodes, hash_fn=custom_hash, vnodes=VNODES, replicas=4)
         self.pending_transfers: Dict[str, Set[str]] = {}  # Track pending transfers for new nodes
         self.node_key_map = defaultdict(set)  # Tracks keys assigned to each node
+        self.ver = 0  # Version number for the hash ring
 
     def add_node(self, new_node: str) -> Set[str]:
         """
@@ -59,43 +71,14 @@ class ConsistentHashManager:
         for node, keys in self.node_key_map.items():
             print(f"  {node}: {len(keys)} keys")
 
+    def get_node_key_map(self) -> Dict[str, Set[str]]:
+        return dict(self.node_key_map)
+
     def get_pending_transfers(self, node: str) -> Set[str]:
         return self.pending_transfers.get(node, set())
+    
+    def get_ring_state(self) -> bytes:
+        return pickle.dumps((self.hash_ring.nodes, self.node_key_map, self.ver))
 
 
-random.seed(42)
-def generate_random_keys(num_keys: int, length: int = 8) -> List[str]:
-    """Generate a list of random alphanumeric keys."""
-    return [''.join(random.choices(string.ascii_letters + string.digits, k=length)) for _ in range(num_keys)]
-
-
-def benchmark_hash_ring():
-    """Benchmark function for consistent hashing."""
-    initial_nodes = ["node1", "node2", "node3"]
-    hash_manager = ConsistentHashManager(nodes=initial_nodes, node_id="node1")
-
-    # Generate random keys and assign them
-    num_keys = 1000
-    keys = generate_random_keys(num_keys)
-    for key in keys:
-        hash_manager.assign_key(key)
-
-    print("Initial Key Distribution:")
-    hash_manager.print_node_key_distribution()
-
-    # Add a new node and observe redistribution
-    new_node = "node4"
-    print(f"\nAdding new node: {new_node}")
-    transferred_keys = hash_manager.add_node(new_node)
-
-    print(f"\nKeys transferred to {new_node}: {len(transferred_keys)}")
-    hash_manager.print_node_key_distribution()
-
-    # List keys transferred from other nodes
-    for node, keys in hash_manager.pending_transfers.items():
-        print(f"Keys transferred from {node} to {new_node}: {len(keys)}")
-
-
-# Run the benchmark
-if __name__ == "__main__":
-    benchmark_hash_ring()
+hash_manager = ConsistentHashManager(nodes=[NODE_ID], node_id=NODE_ID)
