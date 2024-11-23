@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamo Admin Dashboard</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-4">
+        <h1>Dynamo Admin Dashboard</h1>
+        
+        <!-- Navigation Tabs -->
+        <ul class="nav nav-tabs" id="adminTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="add-node-tab" data-bs-toggle="tab" data-bs-target="#add-node" type="button" role="tab" aria-controls="add-node" aria-selected="true">
+                    Add Node
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="ring-status-tab" data-bs-toggle="tab" data-bs-target="#ring-status" type="button" role="tab" aria-controls="ring-status" aria-selected="false">
+                    Ring Status
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content mt-3">
+            <!-- Add Node Tab -->
+            <div class="tab-pane fade show active" id="add-node" role="tabpanel" aria-labelledby="add-node-tab">
+                <div class="node-form">
+                    <h2>Add New Node</h2>
+                    <form id="nodeForm">
+                        <div class="form-group mb-3">
+                            <label for="nodeId">Node ID</label>
+                            <input type="text" class="form-control" id="nodeId" required>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label for="host">Host</label>
+                            <input type="text" class="form-control" id="host" required>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label for="port">Port</label>
+                            <input type="number" class="form-control" id="port" required>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">Add Node</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Ring Status Tab -->
+            <div class="tab-pane fade" id="ring-status" role="tabpanel" aria-labelledby="ring-status-tab">
+                <div class="ring-status">
+                    <h2>Current Ring State</h2>
+                    <div class="status-item mb-2">
+                        <strong>Virtual Nodes:</strong> <span id="virtual_nodes"></span>
+                    </div>
+                    <div class="status-item mb-2">
+                        <strong>Physical Nodes:</strong> <span id="physical_nodes"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script>
+        window.WEBSOCKET_URL = "{{ websocket_url }}";
+    </script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
