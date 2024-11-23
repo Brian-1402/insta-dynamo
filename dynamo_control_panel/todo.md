@@ -1,10 +1,13 @@
 # TODO:
-- [ ] File Upload instead of bytes
+- [X] File Upload instead of bytes
 - [X] Remove quorum checks in writes and reads
-- [ ] Handle case of no node in the ring (Important for add node function, for the put, get functions, do some checks and return false with this message)
-- [ ] Make the add node synchronous (i.e. dont allow add nodes repeatedly, wait for final OK response before adding new node) -> awaits, asyncs removal done
-    - [X] Remove asyncs and awaits
-    - [ ] Form should reset after added
-    - [ ] Form should wait until a new node is added, cant overload
+- [X] Handle case of no node in the ring (Important for add node function, for the put, get functions, do some checks and return false with this message)
+- [X] Make the add node synchronous (i.e. dont allow add nodes repeatedly, wait for final OK response before adding new node) 
+    - [X] Form should reset after added
+    - [X] Form should wait until a new node is added, introduce loading symbol.
+- [ ] Remove virtual nodes mapping, physical node mappings (Control Panel doesnt need to know) -> TBD
+- [ ] Add functions for testing admin image upload and admin image view [Possibly try to use the existing functions to mimic this]
+- [ ] Figure out whether we should store connections directly or just ip/port combo
+- [ ] Add automatic tests for the functions implemented [using pytest]
+- [ ] Propogate the errors in functions back to the UI (for both interface and the final app)
 - [ ] Understand how the js scripts work (what exactly is ws and stuff)
-- [ ] 

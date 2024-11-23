@@ -6,87 +6,208 @@ function initializeWebSocket() {
     
     socket.onopen = function(event) {
         console.log("WebSocket connection established");
+        showNotification('Connected', 'WebSocket connection established', 'success');
     };
 
     socket.onmessage = function(event) {
-        const data = JSON.parse(event.data);
-        updateRingStatus(data);
+        try {
+            const data = JSON.parse(event.data);
+            updateRingStatus(data);
+        } catch (error) {
+            console.error("Error parsing WebSocket message:", error);
+            showNotification('Error', 'Failed to parse WebSocket data', 'error');
+        }
     };
 
     socket.onerror = function(error) {
         console.error("WebSocket error:", error);
+        showNotification('Error', 'WebSocket connection error', 'error');
     };
 
     socket.onclose = function(event) {
         console.log("WebSocket connection closed");
-        // Try to reconnect after 5 seconds
+        showNotification('Disconnected', 'WebSocket connection closed. Attempting to reconnect...', 'warning');
         setTimeout(initializeWebSocket, 5000);
     };
 }
 
 function updateRingStatus(data) {
-    document.getElementById('virtual_nodes').innerText = 
-        Array.isArray(data.virtual_nodes) ? data.virtual_nodes.join(', ') : '';
-    document.getElementById('physical_nodes').innerText = 
-        Array.isArray(data.physical_nodes) ? data.physical_nodes.join(', ') : '';
+    try {
+        const virtualNodesElement = document.getElementById('virtual_nodes');
+        const physicalNodesElement = document.getElementById('physical_nodes');
+
+        if (virtualNodesElement) {
+            virtualNodesElement.innerText = Array.isArray(data.virtual_nodes) ? 
+                data.virtual_nodes.join(', ') : 'No virtual nodes';
+        }
+
+        if (physicalNodesElement) {
+            physicalNodesElement.innerText = Array.isArray(data.physical_nodes) ? 
+                data.physical_nodes.join(', ') : 'No physical nodes';
+        }
+    } catch (error) {
+        console.error("Error updating ring status:", error);
+        showNotification('Error', 'Failed to update ring status', 'error');
+    }
 }
 
-function addNode(event) {
+async function addNode(event) {
     event.preventDefault();
-    
-    const nodeId = document.getElementById('nodeId').value;
-    const host = document.getElementById('host').value;
-    const port = document.getElementById('port').value;
+
+    const form = event.target;
+    const nodeIdInput = form.querySelector('#nodeId');
+    const hostInput = form.querySelector('#host');
+    const portInput = form.querySelector('#port');
+
+    // Validate inputs before proceeding
+    if (!nodeIdInput.value || !hostInput.value || !portInput.value) {
+        showNotification('Error', 'All fields are required', 'error');
+        return;
+    }
+
+    // Create a flag to track if the request is in progress
+    if (form.dataset.isSubmitting === 'true') {
+        return; // Prevent multiple submissions
+    }
 
     try {
-        const response = fetch('/add_node', {
+        // Mark form as submitting and disable inputs
+        form.dataset.isSubmitting = 'true';
+        disableForm(true);
+
+        const response = await fetch('/add_node', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                node_id: nodeId,
-                host: host,
-                port: parseInt(port)
-            })
+                node_id: nodeIdInput.value,
+                host: hostInput.value,
+                port: parseInt(portInput.value, 10),
+            }),
         });
 
-        const result = response.json();
-        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
         if (result.status === 'success') {
             showNotification('Success', result.message || 'Node added successfully', 'success');
-            // Clear the form
-            document.getElementById('nodeForm').reset();
         } else {
-            showNotification('Error', result.message || 'Failed to add node', 'error');
+            throw new Error(result.message || 'Failed to add node');
         }
     } catch (error) {
-        showNotification('Error', 'Error adding node: ' + error, 'error');
+        console.error("Error in addNode:", error);
+        showNotification('Error', error.message || 'Error adding node', 'error');
+    } finally {
+        // Always clean up form state
+        form.dataset.isSubmitting = 'false';
+        disableForm(false);
+        form.reset();
+    }
+}
+
+function disableForm(disable) {
+    try {
+        const form = document.getElementById('nodeForm');
+        if (!form) return;
+
+        // Get all form controls
+        const formControls = form.querySelectorAll('input, button, select, textarea');
+        
+        formControls.forEach(element => {
+            element.disabled = disable;
+            // Add visual feedback
+            if (disable) {
+                element.classList.add('disabled');
+            } else {
+                element.classList.remove('disabled');
+            }
+        });
+
+        // Update form opacity to provide visual feedback
+        form.style.opacity = disable ? '0.7' : '1';
+    } catch (error) {
+        console.error("Error in disableForm:", error);
     }
 }
 
 function showNotification(title, message, type) {
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.innerHTML = `
-        <strong>${title}:</strong> ${message}
-    `;
-    
-    document.body.appendChild(notification);
-    
-    // Remove notification after 3 seconds
-    setTimeout(() => {
-        notification.remove();
-    }, 3000);
+    try {
+        const notificationContainer = document.getElementById('notificationContainer') || 
+            (() => {
+                const container = document.createElement('div');
+                container.id = 'notificationContainer';
+                container.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    z-index: 1000;
+                `;
+                document.body.appendChild(container);
+                return container;
+            })();
+
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.innerHTML = `
+            <strong>${title}:</strong> ${message}
+            <button onclick="this.parentElement.remove()" class="close-btn">&times;</button>
+        `;
+        
+        notification.style.cssText = `
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: ${type === 'success' ? '#d4edda' : 
+                              type === 'error' ? '#f8d7da' : 
+                              type === 'warning' ? '#fff3cd' : '#cce5ff'};
+            border: 1px solid ${type === 'success' ? '#c3e6cb' : 
+                               type === 'error' ? '#f5c6cb' : 
+                               type === 'warning' ? '#ffeeba' : '#b8daff'};
+            color: ${type === 'success' ? '#155724' : 
+                    type === 'error' ? '#721c24' : 
+                    type === 'warning' ? '#856404' : '#004085'};
+        `;
+
+        notificationContainer.appendChild(notification);
+
+        // Remove notification after 5 seconds
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, 5000);
+    } catch (error) {
+        console.error("Error showing notification:", error);
+    }
 }
 
 // Initialize WebSocket when page loads
-document.addEventListener('DOMContentLoaded', function() {
-    initializeWebSocket();
-    
-    // Add form submit handler
-    const form = document.getElementById('nodeForm');
-    if (form) {
-        form.addEventListener('submit', addNode);
+document.addEventListener('DOMContentLoaded', function () {
+    try {
+        initializeWebSocket();
+
+        // Add form submit handler
+        const form = document.getElementById('nodeForm');
+        if (form) {
+            form.addEventListener('submit', addNode);
+            
+            // Add input validation
+            const inputs = form.querySelectorAll('input');
+            inputs.forEach(input => {
+                input.addEventListener('input', function() {
+                    this.classList.remove('error');
+                    if (this.value.trim() === '') {
+                        this.classList.add('error');
+                    }
+                });
+            });
+        }
+    } catch (error) {
+        console.error("Error in initialization:", error);
+        showNotification('Error', 'Failed to initialize application', 'error');
     }
 });

@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from sortedcontainers import SortedDict
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, File, UploadFile
 
 # Configure logging
@@ -27,13 +27,13 @@ class DynamoControlPanel:
         #! Consistent Hashing Ring
         #! Don't maintain hash ring, we shall request for a hash ring from a random node in the ring
         # self.hash_ring = None
-        self.virtual_nodes = {}
-        self.physical_nodes = {}
+        self.virtual_nodes = {} #! TBD if needed
+        # self.physical_nodes = {}
         
         #! (Not needed, no quorum checks by control panel) Replication and Consistency Parameters
-        self.N = 3  # Total number of replicas
-        self.R = 2  # Read replicas
-        self.W = 2  # Write replicas
+        # self.N = 3  # Total number of replicas
+        # self.R = 2  # Read replicas
+        # self.W = 2  # Write replicas
 
         # Async connection pool for all nodes (control panel just knows where the nodes are, and nothing about the ring structure)
         self.connection_pool = {}
@@ -42,72 +42,101 @@ class DynamoControlPanel:
         # self.notification_nodes = []
 
         # virtual nodes per physical node
-        self.num_virt_nodes = 3
+        # self.num_virt_nodes = 3
 
     @staticmethod
     def hash_key(key: str) -> int:
         """Generate a consistent hash for a given key."""
         return int(hashlib.sha256(key.encode()).hexdigest(), 16)
 
-    # New node addition should be synchronized (only one node should be added at a time)
-    def add_node(self, node_id: str, host: str, port: int):
-        """
-        Add a new physical node to the Dynamo ring.
-        Supports multiple virtual nodes for better distribution.
-        """
+    async def add_node(self, node_id: str, host: str, port: int):
+        connection = None
         try:
-            if len(self.connection_pool) == 0:
-                # Create connection in pool
-                self.connection_pool[node_id] = self._create_node_connection(host, port)
-                return True
-            
-            # Find a random existing node from self.connection_pool
-            random_node_url = random.choice(list(self.connection_pool.values()))
+            logger.info("Starting node addition...")
 
-            # Request for the hash ring from a random node in the ring
-            ring_state = self._get_ring_from_node(random_node_url)
+            # Attempt to create and test the connection
+            connection = await self._create_node_connection(host, port)
+            logger.info(f"Connection created for {node_id}. Testing...")
+
+            async with connection.get("/", timeout=aiohttp.ClientTimeout(total=10)) as response:
+                logger.info(f"Response received from node {node_id}: {response.status}")
+                if response.status != 200:
+                    logger.error(f"Node {node_id} did not respond correctly (status: {response.status}).")
+                    return False
+
+            logger.info(f"Node {node_id} passed connection test.")
+
+            # Add the first node directly
+            if len(self.connection_pool) == 0:
+                self.connection_pool[node_id] = connection
+                logger.info(f"First node {node_id} added successfully.")
+                return True
+
+            # Notify an existing node about the new node
+            random_node_url = random.choice(list(self.connection_pool.values()))
+            logger.info(f"Notifying existing node: {random_node_url}")
+
+            ring_state = await self._get_ring_from_node(random_node_url)
+            logger.info(f"Ring state fetched: {ring_state}")
+            
+            # Create virtual nodes
+            #! TODO: Most likely wont need to maintain mappings except the connections
+            # for i in range(self.num_virt_nodes):  # 3 virtual nodes per physical node
+            #     virtual_node_id = f"{node_id}-v{i}"
+            #     virtual_hash = self.hash_key(virtual_node_id)
+                
+            #     # Update the ring state to include the new virtual node
+            #     ring_state[virtual_hash] = virtual_node_id
+            #     self.virtual_nodes[virtual_node_id] = {
+            #         "physical_node": node_id,
+            #         "host": host,
+            #         "port": port
+            #     }
+
             if 'error' in ring_state:
                 logger.error(f"Failed to get ring state: {ring_state['error']}")
                 return False
-            
-            # Create virtual nodes
-            for i in range(self.num_virt_nodes):  # 3 virtual nodes per physical node
-                virtual_node_id = f"{node_id}-v{i}"
-                virtual_hash = self.hash_key(virtual_node_id)
-                
-                # Update the ring state to include the new virtual node
-                ring_state[virtual_hash] = virtual_node_id
-                self.virtual_nodes[virtual_node_id] = {
-                    "physical_node": node_id,
-                    "host": host,
-                    "port": port
-                }
 
-            # Create connection in pool
-            self.connection_pool[node_id] = self._create_node_connection(host, port)
-
-            # Notify one random registered nodes about the new node
-            add_response = self._notify_nodes_about_addition(random_node_url, node_id, host, port)
+            # Add the new node to the connection pool
+            self.connection_pool[node_id] = connection
+            add_response = await self._notify_nodes_about_addition(random_node_url, node_id, host, port)
             if not add_response:
-                logger.warning(f"Failed to notify nodes about new node {node_id}")
+                logger.warning(f"Failed to notify existing nodes about new node {node_id}.")
                 return False
-            logger.info(f"Node {node_id} added to ring with {host}:{port}")
+
+            logger.info(f"Node {node_id} added successfully.")
             return True
-        except Exception as e:
-            logger.error(f"Failed to add node {node_id}: {e}")
+
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout while connecting to node {node_id} at {host}:{port}.")
             return False
+
+        except aiohttp.ClientError as e:
+            logger.error(f"Failed to connect to node {node_id} at {host}:{port}: {e}")
+            return False
+
+        except Exception as e:
+            import traceback
+            logger.error(f"Unexpected error while adding node {node_id}: {e}\n{traceback.format_exc()}")
+            return False
+        
+        finally:
+            if connection and node_id not in self.connection_pool:
+                logger.info(f"Closing connection for {node_id}.")
+                await connection.close()
 
     async def _create_node_connection(self, host: str, port: int):
         """
         Create an aiohttp ClientSession for a node.
-        This allows persistent connections and connection pooling.
+        Ensure the session is properly managed.
         """
         return aiohttp.ClientSession(
             base_url=f"http://{host}:{port}",
             timeout=aiohttp.ClientTimeout(total=10)
         )
 
-    async def _notify_nodes_about_addition(self, node_url: str,new_node_id: str, new_node_ip: str, new_node_port: int):
+
+    async def _notify_nodes_about_addition(self, node_url: str, new_node_id: str, new_node_ip: str, new_node_port: int):
         """
         Notify one node (node_url) registered nodes about the new addition.
         """
@@ -153,38 +182,55 @@ class DynamoControlPanel:
             logger.error(f"Failed to get ring from node {node_url}: {e}")
             return {"error": str(e)}
     
-    async def get_target_nodes(self, key: str) -> List[Dict]:
+    async def _get_target_nodes(self, key: str) -> List[Dict]:
         """
         Find target nodes for a given key using consistent hashing.
         Returns a list of N nodes responsible for the key.
         """
-        key_hash = self.hash_key(key)
         target_nodes = []
-        
-        # Find random node to get the ring from
-        random_node = random.choice(list(self.connection_pool.values()))
-        ring_state = await self._get_ring_from_node(random_node)
-        if 'error' in ring_state:
-            logger.error(f"Failed to get ring state: {ring_state['error']}")
+        if len(self.connection_pool) == 0:
+            logger.warning("No nodes in the ring")
             return target_nodes
         
-        # Find nodes in the ring
-        sorted_hashes = SortedDict(ring_state)
-        start_index = next(i for i, h in enumerate(sorted_hashes) if h >= key_hash)
-        
-        for i in range(self.N):
-            node_hash = sorted_hashes[(start_index + i) % len(sorted_hashes)]
-            virtual_node = ring_state[node_hash]
-            node_info = self.virtual_nodes[virtual_node]
-            target_nodes.append(node_info)
+        # Directly use the get_target_nodes endpoint of the Dynamo Nodes
+        node_url = random.choice(list(self.connection_pool.values()))
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{node_url}/get_target_nodes", params={'key': key}) as response:
+                    if response.status == 200:
+                        target_nodes = await response.json()
+                    else:
+                        logger.warning(f"Failed to get target nodes for key {key}")
+        except Exception as e:
+            logger.error(f"Failed to get target nodes for key {key}: {e}")
         
         return target_nodes
+    
+      # # Find random node to get the ring from
+        # random_node = random.choice(list(self.connection_pool.values()))
+        # ring_state = await self._get_ring_from_node(random_node)
+        # if 'error' in ring_state:
+        #     logger.error(f"Failed to get ring state: {ring_state['error']}")
+        #     return target_nodes
+        
+        # # Find nodes in the ring
+        # sorted_hashes = SortedDict(ring_state)
+        # start_index = next(i for i, h in enumerate(sorted_hashes) if h >= key_hash)
+        
+        # for i in range(self.N):
+        #     node_hash = sorted_hashes[(start_index + i) % len(sorted_hashes)]
+        #     virtual_node = ring_state[node_hash]
+        #     node_info = self.virtual_nodes[virtual_node]
+        #     target_nodes.append(node_info)
+        
+        # return target_nodes
 
-    async def put_image(self, username: str, key: str, image_data: bytes):
+    async def put_image(self, username: str, key: str, image_file: UploadFile):
         """
         PUT operation to store an image in the distributed storage (Write quorum handled by nodes)
         """
         target_nodes = await self.get_target_nodes(key)
+
         if not target_nodes:
             logger.warning(f"No target nodes found for key {key}")
             return False
@@ -192,8 +238,9 @@ class DynamoControlPanel:
         async def _write_to_node(node):
             try:
                 async with self.connection_pool[node['physical_node']].post(
-                    '/put_image', 
-                    data={'username': username, 'key': key, 'image': image_data}
+                    '/put_image',
+                    data={'username': username, 'key': key},
+                    files={'image': image_file.file}
                 ) as response:
                     return response.status == 200
             except Exception as e:
@@ -238,7 +285,17 @@ class DynamoControlPanel:
                     params={'username': username, 'key': key}
                 ) as response:
                     if response.status == 200:
-                        return await response.json()
+                        # response object would be FileResponse
+                        # Get the raw content and headers
+                        content = await response.read()
+                        headers = dict(response.headers)
+                        
+                        # Pass through the response directly
+                        return Response(
+                            content=content,
+                            headers=headers,
+                            status_code=response.status
+                        )
                     return None
             except Exception as e:
                 logger.error(f"Read failed from {node}: {e}")
@@ -298,9 +355,9 @@ class NodeConfig(BaseModel):
 control_panel = DynamoControlPanel()
 
 @app.post("/add_node")
-def add_node(node_config: NodeConfig):
+async def add_node(node_config: NodeConfig):
     """Admin endpoint to add a new node to the Dynamo ring."""
-    success = control_panel.add_node(
+    success = await control_panel.add_node(
         node_config.node_id, 
         node_config.host, 
         node_config.port
@@ -310,7 +367,7 @@ def add_node(node_config: NodeConfig):
     return {"status": "error", "message": "Failed to add node, check logs for details"}
 
 @app.post("/put_image")
-async def put_image(username: str, key: str, image: bytes):
+async def put_image(username: str, key: str, image: UploadFile = File(...)):
     """
     Backend endpoint for putting an image into the distributed storage.
     """
@@ -327,19 +384,19 @@ async def get_image(username:str, key: str):
         return image_data
     return {"success": False, "message": "Image not found"}
 
-@app.get("/ring_state")
-async def get_ring_state():
-    """Endpoint to get the current ring state"""
-    return {
-        "virtual_nodes": list(control_panel.virtual_nodes.keys()),
-        "physical_nodes": list(control_panel.connection_pool.keys()),
-        "node_details": {
-            node_id: {
-                "host": node_info["host"],
-                "port": node_info["port"]
-            } for node_id, node_info in control_panel.virtual_nodes.items()
-        }
-    }
+# @app.get("/ring_state")
+# async def get_ring_state():
+#     """Endpoint to get the current ring state"""
+#     return {
+#         "virtual_nodes": list(control_panel.virtual_nodes.keys()),
+#         "physical_nodes": list(control_panel.connection_pool.keys()),
+#         "node_details": {
+#             node_id: {
+#                 "host": node_info["host"],
+#                 "port": node_info["port"]
+#             } for node_id, node_info in control_panel.virtual_nodes.items()
+#         }
+#     }
 
 @app.websocket("/admin_dashboard")
 async def admin_dashboard(websocket: WebSocket):
