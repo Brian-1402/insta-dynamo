@@ -2,14 +2,19 @@
 let socket = null;
 
 function initializeWebSocket() {
-    socket = new WebSocket("ws://localhost:8000/admin_dashboard");
-    
-    socket.onopen = function(event) {
+    // Dynamically construct WebSocket URL based on current location
+    const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const wsHost = window.location.host; // Automatically picks up current host and port
+    const wsPath = "/admin_dashboard"; // WebSocket endpoint
+
+    socket = new WebSocket(`${wsProtocol}://${wsHost}${wsPath}`);
+
+    socket.onopen = function (event) {
         console.log("WebSocket connection established");
         showNotification('Connected', 'WebSocket connection established', 'success');
     };
 
-    socket.onmessage = function(event) {
+    socket.onmessage = function (event) {
         try {
             const data = JSON.parse(event.data);
             updateRingStatus(data);
@@ -19,17 +24,18 @@ function initializeWebSocket() {
         }
     };
 
-    socket.onerror = function(error) {
+    socket.onerror = function (error) {
         console.error("WebSocket error:", error);
         showNotification('Error', 'WebSocket connection error', 'error');
     };
 
-    socket.onclose = function(event) {
+    socket.onclose = function (event) {
         console.log("WebSocket connection closed");
         showNotification('Disconnected', 'WebSocket connection closed. Attempting to reconnect...', 'warning');
         setTimeout(initializeWebSocket, 5000);
     };
 }
+
 
 function updateRingStatus(data) {
     try {
@@ -209,5 +215,75 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (error) {
         console.error("Error in initialization:", error);
         showNotification('Error', 'Failed to initialize application', 'error');
+    }
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+    const uploadForm = document.getElementById("uploadForm");
+    const imageGallery = document.getElementById("imageGallery");
+
+    // Fetch and display the image list when the Image Management tab is selected
+    const imageManagementTab = document.getElementById("image-management-tab");
+    imageManagementTab.addEventListener("click", fetchImageList);
+
+    // Handle Image Upload
+    uploadForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        const fileInput = document.getElementById("imageFile");
+        const formData = new FormData();
+        formData.append("image", fileInput.files[0]);
+
+        try {
+            const response = await fetch("/admin/upload_image", {
+                method: "POST",
+                body: formData,
+            });
+            const result = await response.json();
+
+            if (result.success) {
+                showNotification("Success", "Image uploaded successfully", "success");
+                fetchImageList(); // Refresh the gallery after upload
+            } else {
+                throw new Error(result.message);
+            }
+        } catch (error) {
+            showNotification("Error", error.message || "Image upload failed", "error");
+        }
+        finally {
+            fileInput.value = ""; // Clear the file input
+        }
+    });
+
+    // Fetch and display image list
+    async function fetchImageList() {
+        try {
+            const response = await fetch("/admin/list_images");
+            const result = await response.json();
+
+            if (result.success) {
+                imageGallery.innerHTML = ""; // Clear existing gallery
+                result.images.forEach((filename) => {
+                    const imageContainer = document.createElement("div");
+                    imageContainer.className = "col-md-3 mb-3";
+
+                    imageContainer.innerHTML = `
+                        <div class="card">
+                            <a href="/admin/view_image/${filename}" target="_blank">
+                                <img src="/admin/view_image/${filename}" class="card-img-top img-thumbnail" alt="${filename}">
+                            </a>
+                            <div class="card-body text-center">
+                                <p class="card-text">${filename}</p>
+                            </div>
+                        </div>
+                    `;
+
+                    imageGallery.appendChild(imageContainer);
+                });
+            } else {
+                throw new Error(result.message);
+            }
+        } catch (error) {
+            showNotification("Error", error.message || "Failed to fetch images", "error");
+        }
     }
 });

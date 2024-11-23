@@ -23,6 +23,12 @@
                     Ring Status
                 </button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="image-management-tab" data-bs-toggle="tab" data-bs-target="#image-management" type="button" role="tab" aria-controls="image-management" aria-selected="false">
+                    Image Management
+                </button>
+            </li>
+
         </ul>
 
         <!-- Tab Content -->
@@ -62,6 +68,25 @@
                     <div class="status-item mb-2">
                         <strong>Physical Nodes:</strong> <span id="physical_nodes"></span>
                     </div>
+                </div>
+            </div>
+
+            <!-- Image Management Tab Content -->
+            <div class="tab-pane fade" id="image-management" role="tabpanel" aria-labelledby="image-management-tab">
+                <h2>Admin Image Management</h2>
+                <!-- Upload Form -->
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="form-group mb-3">
+                        <label for="imageFile">Upload Image</label>
+                        <input type="file" class="form-control" id="imageFile" accept="image/*" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Upload</button>
+                </form>
+                <hr>
+                <!-- Uploaded Images -->
+                <h3>Uploaded Images</h3>
+                <div id="imageGallery" class="row mt-3">
+                    <!-- Dynamically populated gallery -->
                 </div>
             </div>
         </div>

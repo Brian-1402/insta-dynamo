@@ -133,3 +133,22 @@ input.error:focus {
 #nodeForm button {
     transition: opacity 0.3s, background-color 0.3s;
 }
+
+#imageGallery {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+#imageGallery .card {
+    width: 100%;
+    max-width: 200px;
+    overflow: hidden;
+}
+
+#imageGallery .card img {
+    object-fit: cover;
+    height: 200px;
+    width: 100%;
+    border-radius: 8px;
+}

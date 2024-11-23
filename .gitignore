@@ -162,6 +162,7 @@ cython_debug/
 #.idea/
 
 # Project specifics
-# Starter code of bayou from lab4
-lab4/
+# image store of dynamo node
+store/
+*_store/
 

@@ -10,15 +10,18 @@ from typing import Dict, Any, Optional, List, Tuple
 
 import uvicorn
 import aiohttp
+from aiohttp import FormData
 from pydantic import BaseModel
 from sortedcontainers import SortedDict
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, File, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response, StreamingResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, File, UploadFile, Depends, Form
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.ERROR,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -58,13 +61,14 @@ class DynamoControlPanel:
             connection = await self._create_node_connection(host, port)
             logger.info(f"Connection created for {node_id}. Testing...")
 
-            async with connection.get("/", timeout=aiohttp.ClientTimeout(total=10)) as response:
-                logger.info(f"Response received from node {node_id}: {response.status}")
-                if response.status != 200:
-                    logger.error(f"Node {node_id} did not respond correctly (status: {response.status}).")
-                    return False
+            #! REPLACE WHEN THE BELOW ENDPOINT IS CREATED IN DYNAMO NODE
+            # async with connection.get("/", timeout=aiohttp.ClientTimeout(total=10)) as response:
+            #     logger.info(f"Response received from node {node_id}: {response.status}")
+            #     if response.status != 200:
+            #         logger.error(f"Node {node_id} did not respond correctly (status: {response.status}).")
+            #         return False
 
-            logger.info(f"Node {node_id} passed connection test.")
+            # logger.info(f"Node {node_id} passed connection test.")
 
             # Add the first node directly
             if len(self.connection_pool) == 0:
@@ -229,33 +233,41 @@ class DynamoControlPanel:
         """
         PUT operation to store an image in the distributed storage (Write quorum handled by nodes)
         """
-        target_nodes = await self.get_target_nodes(key)
-
+        #! REPLACE BELOW BY target_nodes = await self._get_target_nodes(key)
+        target_nodes = list(self.connection_pool.keys())
         if not target_nodes:
             logger.warning(f"No target nodes found for key {key}")
             return False
-        
+
         async def _write_to_node(node):
             try:
-                async with self.connection_pool[node['physical_node']].post(
-                    '/put_image',
-                    data={'username': username, 'key': key},
-                    files={'image': image_file.file}
+                # file_content = await image_file.read()
+                form = FormData()
+                form.add_field("username", username)
+                form.add_field("key", key)
+                form.add_field(
+                    "file", 
+                    filename=image_file.filename, 
+                    value=image_file.file,
+                    content_type=image_file.content_type,
+                )
+                # image_file.file.seek(0)  # Reset the file pointer again
+                #! REPLACE NODE BY node['physical_node'] depending on what get_target_nodes returns
+                async with self.connection_pool[node].post(
+                    "/upload", 
+                    data=form
                 ) as response:
                     return response.status == 200
             except Exception as e:
                 logger.error(f"Write failed to {node}: {e}")
                 return False
 
-        # Write to any one of the target nodes
         write_response = await _write_to_node(random.choice(target_nodes))
-
         if not write_response:
             logger.warning(f"Failed to write image for key {key}")
             return False
-        
+
         return True
-    
         # # Concurrent writes
         # write_results = await asyncio.gather(
         #     *[_write_to_node(node) for node in target_nodes[:self.W]]
@@ -273,28 +285,29 @@ class DynamoControlPanel:
         """
         GET operation to retrieve an image from the distributed storage (Read quorum handled by nodes)
         """
-        target_nodes = await self.get_target_nodes(key)
+        #! REPLACE below as target_nodes = await self._get_target_nodes(key)
+        target_nodes = list(self.connection_pool.keys())
         if not target_nodes:
             logger.warning(f"No target nodes found for key {key}")
             return None
         
         async def _read_from_node(node):
             try:
-                async with self.connection_pool[node['physical_node']].get(
-                    '/get_image', 
-                    params={'username': username, 'key': key}
+                #! REPLACE NODE BY node['physical_node'] depending on what get_target_nodes returns
+                async with self.connection_pool[node].get(
+                    f'/fetch/{key}', 
                 ) as response:
                     if response.status == 200:
                         # response object would be FileResponse
                         # Get the raw content and headers
                         content = await response.read()
-                        headers = dict(response.headers)
-                        
-                        # Pass through the response directly
+                        content_type = response.content_type  # Preserve the Content-Type
+
+                        # Return the file as a Response
                         return Response(
                             content=content,
-                            headers=headers,
-                            status_code=response.status
+                            media_type=content_type,
+                            headers={"Content-Disposition": f"inline; filename={key}"}
                         )
                     return None
             except Exception as e:
@@ -384,20 +397,6 @@ async def get_image(username:str, key: str):
         return image_data
     return {"success": False, "message": "Image not found"}
 
-# @app.get("/ring_state")
-# async def get_ring_state():
-#     """Endpoint to get the current ring state"""
-#     return {
-#         "virtual_nodes": list(control_panel.virtual_nodes.keys()),
-#         "physical_nodes": list(control_panel.connection_pool.keys()),
-#         "node_details": {
-#             node_id: {
-#                 "host": node_info["host"],
-#                 "port": node_info["port"]
-#             } for node_id, node_info in control_panel.virtual_nodes.items()
-#         }
-#     }
-
 @app.websocket("/admin_dashboard")
 async def admin_dashboard(websocket: WebSocket):
     """WebSocket endpoint for real-time admin dashboard updates."""
@@ -416,45 +415,6 @@ async def admin_dashboard(websocket: WebSocket):
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
 
-# # CLI for adding nodes
-# def cli_add_node():
-#     """
-#     Command-line interface for adding a node to the Dynamo ring.
-#     """
-#     parser = argparse.ArgumentParser(description='Add a node to the Dynamo ring')
-#     parser.add_argument('--node-id', required=True, help='Unique identifier for the node')
-#     parser.add_argument('--host', required=True, help='Host address of the node')
-#     parser.add_argument('--port', type=int, required=True, help='Port number of the node')
-    
-#     # If no arguments provided, enter interactive mode
-#     if len(sys.argv) == 1:
-#         print("Interactive Node Addition")
-#         node_id = input("Enter Node ID: ")
-#         host = input("Enter Host (e.g., localhost): ")
-#         port = int(input("Enter Port: "))
-#     else:
-#         args = parser.parse_args()
-#         node_id = args.node_id
-#         host = args.host
-#         port = args.port
-
-#     # Attempt to add node
-#     import requests
-#     try:
-#         response = requests.post('http://localhost:8000/add_node', json={
-#             'node_id': node_id,
-#             'host': host,
-#             'port': port
-#         })
-#         result = response.json()
-        
-#         if result.get('success'):
-#             print(f"Node {node_id} added successfully!")
-#         else:
-#             print(f"Failed to add node {node_id}")
-#     except Exception as e:
-#         print(f"Error adding node: {e}")
-
 @app.get("/", response_class=HTMLResponse)
 async def get_admin_dashboard(request: Request):
     """Render the admin dashboard template"""
@@ -462,6 +422,60 @@ async def get_admin_dashboard(request: Request):
         "request": request,
         "websocket_url": "ws://localhost:8000/admin_dashboard"
     })
+
+#! Add this global dictionary to store hashes for admin testing [Temp only needed for admin testing]
+admin_image_store = {}
+
+@app.post("/admin/upload_image")
+async def admin_upload_image(image: UploadFile = File(...)):
+    """
+    Admin endpoint to upload an image and store its hash for later retrieval.
+    """
+    try:
+        # Read the file to calculate the hash
+        file_content = await image.read()
+        hashed_key = DynamoControlPanel.hash_key(file_content.decode("latin1"))
+        image.file.seek(0)  # Reset the pointer so the file can be reused
+
+        # Store the file using put_image (simulate admin username as 'admin')
+        await control_panel.put_image("admin", str(hashed_key), image)
+
+        # Store the hash and filename for admin retrieval
+        admin_image_store[image.filename] = hashed_key
+        return {"success": True, "message": "Image uploaded successfully", "key": hashed_key}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@app.get("/admin/list_images")
+async def list_uploaded_images():
+    """
+    Endpoint to return the list of filenames of uploaded images.
+    """
+    try:
+        return {"success": True, "images": list(admin_image_store.keys())}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+@app.get("/admin/view_image/{filename}")
+async def admin_view_image(filename: str):
+    """
+    Admin endpoint to view an uploaded image using its filename.
+    """
+    try:
+        if filename not in admin_image_store:
+            return {"success": False, "message": "Image not found"}
+
+        # Retrieve the image using its hash
+        hashed_key = admin_image_store[filename]
+        response = await control_panel.get_image("admin", str(hashed_key))
+
+        if response:
+            return response # Return the image as a response
+        return {"success": False, "message": "Image retrieval failed"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
 
 # Main entry point with CLI support
 if __name__ == "__main__":
