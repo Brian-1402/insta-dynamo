@@ -1,9 +1,11 @@
 from collections import defaultdict
 from typing import Dict, Set, List
-from uhashring import HashRing
+# from uhashring import HashRing
+from app.core.hashring import HashRing
 from app.core.config import NODE_ID, VNODES
 import hashlib
 import pickle
+from copy import deepcopy
 
 def hash_key(key: str) -> int:
     return int(hashlib.sha256(key.encode()).hexdigest(), 16)
@@ -30,7 +32,8 @@ class ConsistentHashManager:
         """
         print(f"Adding node {new_node}...")
         
-        old_hash_ring = HashRing(nodes=self.hash_ring.nodes)
+        # old_hash_ring = HashRing(nodes=self.hash_ring.nodes)
+        old_hash_ring = deepcopy(self.hash_ring)
         self.hash_ring.add_node(new_node)
         print(f"Hash ring updated. Current nodes: {self.hash_ring.nodes}")
         

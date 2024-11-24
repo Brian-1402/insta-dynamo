@@ -5,8 +5,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Access environment variables
-NODE_ID = os.getenv("NODE_ID", "default_node")  # Default value if not set
-VNODES = int(os.getenv("VNODES", "10"))  # Default value if not set
+NODE_ID = os.getenv("NODE_ID", "default_node")
+VNODES = int(os.getenv("VNODES", "10"))
+N_REPLICAS = int(os.getenv("N_REPLICAS", "3"))
 STORE_DIR = os.getenv("STORE", "./store")          # Default to ./store
 
 # Add other configuration variables as needed

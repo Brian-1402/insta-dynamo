@@ -8,3 +8,4 @@ httpx
 aiofiles
 uhashring
 python-dotenv
+sortedcontainers

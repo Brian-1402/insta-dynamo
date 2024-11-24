@@ -35,7 +35,19 @@ behaviour: joining node updates its hash ring object. Note that it still hasn't 
 
 
 
-- in get requests, it needs:
-    - username
-    - image data
-    - image hash
+## TODO:
+
+### extra endpoints:
+- health
+- get target nodes to send writes to
+- update_ring/add node - info of new node instance.
+
+- make custom consistent hashing code to support virtual nodes and replicas
+- fetch and upload requests should support R and W requests and return after acknowledgement. (For now, do such that it sends N writes but returns after getting just W write responses)
+- Gossip protocol - versioning of keyvalue pairs or ranges.
+
+
+
+#### For hashring class
+- test whether list of nodes per key is always equal to min(N, num_nodes)
+- for different parts of the app code, always consider case of N >= numnodes

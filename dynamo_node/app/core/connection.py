@@ -3,12 +3,40 @@ import aiohttp
 from app.core.logger import logger
 
 class NodeConnector:
-    def __init__(self):
+    def __init__(self, node_id, ring_nodes):
         self.connection_pool = {}
+        self.node_id = node_id
+        # Check if there's an existing event loop
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:  # No event loop in the current thread
+            loop = None
+
+        if loop:
+            loop.create_task(self._initialize_nodes(ring_nodes))
+        else:
+            asyncio.run(self._initialize_nodes(ring_nodes))
+
+    async def _initialize_nodes(self, ring_nodes):
+        """
+        Asynchronously initializes nodes by calling add_node concurrently.
+        """
+        # await asyncio.gather(
+        #     *(self.add_node(node_id, ip, port) for node_id, (ip, port) in ring_nodes.items())
+        # )    
+        tasks = []
+        for node_id, (ip, port) in ring_nodes.items():
+            task = self.add_node(node_id, ip, port)
+            tasks.append(task)
+
+        await asyncio.gather(*tasks)
 
     async def add_node(self, node_id: str, host: str, port: int):
         connection = None
         try:
+            if node_id == self.node_id:
+                logger.info(f"Skipping connection to self ({node_id}).")
+                return True
             # Attempt to create and test the connection
             connection = await self._create_node_connection(host, port)
             logger.info(f"Connection created for {node_id}. Testing...")
@@ -57,5 +85,3 @@ class NodeConnector:
 
     def get_connection(self, node_id: str):
         return self.connection_pool.get(node_id, None)
-
-connector = NodeConnector()

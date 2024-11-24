@@ -2,26 +2,33 @@ import pytest
 from fastapi.testclient import TestClient
 from hashlib import sha256
 from app.main import app
-from app.core.key_value import kv_storage
-from app.core.config import STORE_DIR
 import os
 
+from app.core.hashmanager import DistributedKeyValueManager
+
+NODE_ID = "node1"
+VNODES = 5
+N_REPLICAS = 3
+STORE_DIR = "./store"
 
 client = TestClient(app)
 
-def setup_function():
+@pytest.fixture
+def manager():
+    """Fixture to initialize a DistributedKeyValueManager."""
+    return DistributedKeyValueManager(nodes=[], node_id=NODE_ID, vnodes=VNODES, replicas=N_REPLICAS)
+
+def setup_function(manager):
     """Setup function to reset the hash table and ensure a clean store directory."""
-    global hash_table
-    kv_storage.clear()
     if os.path.exists(STORE_DIR):
         for file in os.listdir(STORE_DIR):
             os.remove(os.path.join(STORE_DIR, file))
 
-def teardown_function():
+def teardown_function(manager):
     """Cleanup function after tests."""
-    setup_function()
+    setup_function(manager)
 
-def test_upload_image():
+def test_upload_image(manager):
     """Test the image upload functionality."""
     image_path = "test_image.jpg"
     with open(image_path, "wb") as f:
@@ -43,7 +50,7 @@ def test_upload_image():
     assert response.json()["filename"] == "test_image.jpg"
     assert response.json()["username"] == "testuser"
 
-def test_fetch_image():
+def test_fetch_image(manager):
     """Test the image fetch functionality."""
     # Upload an image
     image_path = "test_image.jpg"
@@ -67,7 +74,7 @@ def test_fetch_image():
     assert response.status_code == 200
     assert response.content == file_contents
 
-def test_fetch_nonexistent_hash():
+def test_fetch_nonexistent_hash(manager):
     """Test fetching an image with a nonexistent hash."""
     response = client.get("/fetch/nonexistenthash")
     assert response.status_code == 404

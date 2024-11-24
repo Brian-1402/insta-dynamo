@@ -53,18 +53,34 @@ class DynamoControlPanel:
             connection = await self._create_node_connection(host, port)
             logger.info(f"Connection created for {node_id}. Testing...")
 
-            #! REPLACE WHEN THE BELOW ENDPOINT IS CREATED IN DYNAMO NODE
-            # async with connection.get("/", timeout=aiohttp.ClientTimeout(total=10)) as response:
-            #     logger.info(f"Response received from node {node_id}: {response.status}")
-            #     if response.status != 200:
-            #         logger.error(f"Node {node_id} did not respond correctly (status: {response.status}).")
-            #         return False
 
-            # logger.info(f"Node {node_id} passed connection test.")
+            logger.info(f"Node {node_id} passed connection test.")
 
             # Add the first node directly
             if len(self.connection_pool) == 0:
-                self.connection_pool[node_id] = connection
+                url = f"http://{host}:{port}/join_ring"
+                headers = {"Content-Type": "application/json"}
+                payload = {
+                    "node_data": {
+                        "nodes": {
+                            node_id: {"ip": host, "port": port}
+                        }
+                    },
+                    "ring_metadata": {
+                        "physical_nodes": {}
+                    }
+                }
+
+                async with aiohttp.ClientSession() as session:
+                    try:
+                        async with session.post(url, headers=headers, json=payload) as response:
+                            if response.status == 200:
+                                logger.info(f"Successfully joined the ring: {await response.json()}")
+                            else:
+                                logger.error(f"Failed to join the ring. Status: {response.status}, Response: {await response.text()}")
+                    except Exception as e:
+                        logger.error(f"Error occurred while trying to join the ring: {e}")
+                    self.connection_pool[node_id] = connection
                 logger.info(f"First node {node_id} added successfully.")
                 return True
 
@@ -72,8 +88,8 @@ class DynamoControlPanel:
             random_node_url = random.choice(list(self.connection_pool.values()))
             logger.info(f"Notifying existing node: {random_node_url}")
 
-            ring_state = await self._get_ring_from_node(random_node_url)
-            logger.info(f"Ring state fetched: {ring_state}")
+            # ring_state = await self._get_ring_from_node(random_node_url)
+            # logger.info(f"Ring state fetched: {ring_state}")
             
             # Create virtual nodes
             #! TODO: Most likely wont need to maintain mappings except the connections
@@ -89,9 +105,9 @@ class DynamoControlPanel:
             #         "port": port
             #     }
 
-            if 'error' in ring_state:
-                logger.error(f"Failed to get ring state: {ring_state['error']}")
-                return False
+            # if 'error' in ring_state:
+            #     logger.error(f"Failed to get ring state: {ring_state['error']}")
+            #     return False
 
             # Add the new node to the connection pool
             self.connection_pool[node_id] = connection
@@ -145,7 +161,7 @@ class DynamoControlPanel:
         async def _send_update_to_node(node_url):
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.post(f"{node_url}/update_ring", json=ring_state) as response:
+                    async with session.post(f"{node_url}/invite_node", json=ring_state) as response:
                         return response.status == 200
             except Exception as e:
                 logger.error(f"Failed to notify node {node_url}: {e}")
