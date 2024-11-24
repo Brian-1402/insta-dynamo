@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, Response
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, UploadFile, File
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, UploadFile, File, Form
 
 from src.core.control_panel import DynamoControlPanel
 
@@ -62,7 +62,7 @@ async def add_node(node_config: NodeConfig):
     return {"status": "error", "message": "Failed to add node, check logs for details"}
 
 @app.post("/put_image")
-async def put_image(username: str, key: str, image: UploadFile = File(...)):
+async def put_image(username: str = Form(...), key: str = Form(...), image: UploadFile = File(...)):
     """
     Backend endpoint for putting an image into the distributed storage.
     """

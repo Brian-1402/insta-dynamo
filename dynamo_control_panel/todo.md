@@ -7,7 +7,7 @@
     - [X] Form should wait until a new node is added, introduce loading symbol.
 - [ ] Remove virtual nodes mapping, physical node mappings (Control Panel doesnt need to know) -> TBD
 - [X] Add functions for testing admin image upload and admin image view [Possibly try to use the existing functions to mimic this]
-- [X] Made good frontend for viewing images
+- [X] Made a frontend for viewing images
 - [ ] Figure out whether we should store connections directly or just ip/port combo
 - [ ] Add automatic tests for the functions implemented [using pytest]
 - [ ] Propogate the errors in functions back to the UI (for both interface and the final app)

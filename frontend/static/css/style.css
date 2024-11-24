@@ -1,0 +1,67 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+header {
+    background-color: #007BFF;
+    color: white;
+    padding: 10px;
+    text-align: center;
+}
+
+nav a {
+    margin: 0 10px;
+    color: white;
+    text-decoration: none;
+}
+
+main {
+    padding: 20px;
+}
+
+form label {
+    display: block;
+    margin-top: 10px;
+}
+
+form input, form button {
+    margin-top: 5px;
+}
+
+/* General Reset */
+body, h1, p, ul, li, img, div {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Gallery Layout */
+#gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+    padding: 20px;
+    justify-items: center;
+}
+
+.image-block {
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+.image-block img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 5px;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.image-block img:hover {
+    transform: scale(1.05);
+    opacity: 0.9;
+}
+

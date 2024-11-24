@@ -243,7 +243,12 @@ class DynamoControlPanel:
                     value=image_file.file,
                     content_type=image_file.content_type,
                 )
-                # image_file.file.seek(0)  # Reset the file pointer again
+                print(f"Uploading image with key: {key}")
+                print(f"Form type: {type(form)}")
+                print(f"Form fields: {form._fields}")
+                print(f"form._fields[0]: {form._fields[0]}")
+                print(f"form._fields[1]: {form._fields[1]}")
+                print(f"form._fields[2]: {form._fields[2]}")
                 #! REPLACE NODE BY node['physical_node'] depending on what get_target_nodes returns
                 async with self.connection_pool[node].post(
                     "/upload", 

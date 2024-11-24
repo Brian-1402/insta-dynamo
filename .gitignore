@@ -166,3 +166,6 @@ cython_debug/
 store/
 *_store/
 
+# Dont store the key.key file
+key.key
+
