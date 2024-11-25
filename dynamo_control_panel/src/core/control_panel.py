@@ -32,6 +32,7 @@ class DynamoControlPanel:
 
         # Async connection pool for all nodes (control panel just knows where the nodes are, and nothing about the ring structure)
         self.connection_pool = {}
+        self.topology = {}
         
         # # Nodes to notify when ring state changes
         # self.notification_nodes = []
@@ -81,11 +82,13 @@ class DynamoControlPanel:
                     except Exception as e:
                         logger.error(f"Error occurred while trying to join the ring: {e}")
                     self.connection_pool[node_id] = connection
+                    self.topology[node_id] = {"host": host, "port": port}
                 logger.info(f"First node {node_id} added successfully.")
                 return True
 
             # Notify an existing node about the new node
-            random_node_url = random.choice(list(self.connection_pool.values()))
+            random_node_id = random.choice(list(self.connection_pool.keys()))
+            random_node_url = f"http://{self.topology[random_node_id]['host']}:{self.topology[random_node_id]['port']}"
             logger.info(f"Notifying existing node: {random_node_url}")
 
             # ring_state = await self._get_ring_from_node(random_node_url)

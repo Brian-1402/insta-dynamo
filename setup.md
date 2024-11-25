@@ -36,14 +36,19 @@ cd insta-dynamo
 
 4. You will observe the following:
 - The insta-dynamo app should now be running at http://0.0.0.0:9000
-- The dynamo_control_panel will be running at http://0.0.0.0:8000
+- The dynamo_control_panel will be running at http://localhost:8000
 - One instance of Dynamo Node will also be running with host ip: 0.0.0.0 and port: 9090
 
-5. Go to [dynamo_control_panel](http://0.0.0.0:8000) and add the dynamo node that has been created (node-id: \<any name\>, host: 0.0.0.0, port: 9090)
+5. Go to [dynamo_control_panel](http://localhost:8000) and add the dynamo node that has been created (node-id: "default_node", host: "0.0.0.0", port: "9090")
 
 6. You can now see that the node has been added under the ring status tab. At the same time you can also access the [insta-dynamo](http://0.0.0.0:9000) app and register and start uploading images along with viewing them
 
-7. For every new node that you created (NOTE: you will have to specify different ip and port in the bash file for node), first add it via the dynamo_control_panel and you will find that it has been added under the ring status tab of the control panel.
+7. For adding new nodes, the following command template should be used (in a new terminal) and then the same details should be filled in the [dynamo_control_panel](http://localhost:8000)
+    ```bash
+    cd dynamo_node
+    NODE_ID=<node_name> uvicorn app.main:app --host <host> --port <port> --reload
+    ```
+
 
 ## Setup Instructions (deployment)
 
