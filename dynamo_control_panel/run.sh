@@ -1,2 +1,3 @@
 #/bin/bash
-uvicorn src.api.endpoints:app --host 0.0.0.0 --port 9000 --reload
+pip install -r requirements.txt
+uvicorn src.api.endpoints:app --host localhost --port 8000 --reload

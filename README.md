@@ -1,5 +1,7 @@
 # insta-dynamo
 
+For Instructions on how to setup and run the apps please refer to [SETUP](./setup.md)
+
 ## Project Proposal: Decentralized Instagram with Dynamo-like Storage
 
 ### Group Members:
